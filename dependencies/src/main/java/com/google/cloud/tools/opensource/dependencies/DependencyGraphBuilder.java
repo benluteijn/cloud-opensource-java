@@ -21,6 +21,10 @@ import static com.google.common.collect.ImmutableList.toImmutableList;
 import com.google.common.base.CharMatcher;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
+import com.google.common.graph.ImmutableValueGraph;
+import com.google.common.graph.MutableValueGraph;
+import com.google.common.graph.ValueGraph;
+import com.google.common.graph.ValueGraphBuilder;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -192,6 +196,35 @@ public class DependencyGraphBuilder {
     levelOrder(node, graph, GraphTraversalOption.FULL_DEPENDENCY_WITH_PROVIDED);
 
     return graph;
+  }
+
+  public static ImmutableValueGraph<DependencyGraphNode, DependencyGraphEdge>
+      getStaticLinkageCheckDependencyValueGraph(List<Artifact> artifacts)
+          throws RepositoryException {
+
+    MutableValueGraph<DependencyGraphNode, DependencyGraphEdge> graph = ValueGraphBuilder.directed()
+        .allowsSelfLoops(false).build();
+    DependencyNode root = resolveCompileTimeDependencies(artifacts, true);
+
+    Queue<DependencyNode> queue = new ArrayDeque<>();
+    queue.add(root);
+    while (!queue.isEmpty()) {
+      DependencyNode node = queue.remove();
+      DependencyGraphNode dependencyGraphNode =
+          DependencyGraphNode.builder().setArtifact(node.getArtifact()).build();
+      for (DependencyNode child : node.getChildren()) {
+        DependencyGraphNode childGraphNode =
+            DependencyGraphNode.builder().setArtifact(child.getArtifact()).build();
+        DependencyGraphEdge edge = DependencyGraphEdge.create(
+            child.getDependency().isOptional(),
+            child.getDependency().getScope()
+        );
+        graph.putEdgeValue(dependencyGraphNode, childGraphNode, edge);
+        queue.add(child);
+      }
+    }
+
+    return ImmutableValueGraph.copyOf(graph);
   }
 
   /**

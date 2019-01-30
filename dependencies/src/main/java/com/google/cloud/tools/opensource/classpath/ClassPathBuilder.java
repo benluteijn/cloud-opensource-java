@@ -16,16 +16,23 @@
 
 package com.google.cloud.tools.opensource.classpath;
 
+import static com.google.common.collect.ImmutableList.toImmutableList;
+
 import com.google.cloud.tools.opensource.dependencies.Artifacts;
 import com.google.cloud.tools.opensource.dependencies.DependencyGraph;
 import com.google.cloud.tools.opensource.dependencies.DependencyGraphBuilder;
+import com.google.cloud.tools.opensource.dependencies.DependencyGraphEdge;
+import com.google.cloud.tools.opensource.dependencies.DependencyGraphNode;
 import com.google.cloud.tools.opensource.dependencies.DependencyPath;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.LinkedListMultimap;
 import com.google.common.collect.Maps;
+import com.google.common.graph.ImmutableValueGraph;
+import com.google.common.graph.Traverser;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 import org.eclipse.aether.RepositoryException;
 import org.eclipse.aether.artifact.Artifact;
 
@@ -52,9 +59,21 @@ public class ClassPathBuilder {
   static ImmutableList<Path> artifactsToClasspath(List<Artifact> artifacts)
       throws RepositoryException {
 
+    ImmutableValueGraph<DependencyGraphNode, DependencyGraphEdge> graph = DependencyGraphBuilder
+        .getStaticLinkageCheckDependencyValueGraph(artifacts);
+    Traverser<DependencyGraphNode> traverser = Traverser.forGraph(graph);
+    ImmutableList<DependencyGraphNode> initialNodes = artifacts.stream().map(
+        DependencyGraphNode::create
+    ).collect(toImmutableList());
+
+    ImmutableList.Builder<Path> classPathBuilder = ImmutableList.builder();
+    for (DependencyGraphNode node : traverser.breadthFirst(initialNodes)) {
+      classPathBuilder.add(node.getArtifact().getFile().toPath());
+    }
+    return classPathBuilder.build();
     // LinkedListMultimap keeps the key order as they were first added to the multimap
-    LinkedListMultimap<Path, DependencyPath> multimap = artifactsToDependencyPaths(artifacts);
-    return ImmutableList.copyOf(multimap.keySet());
+//     LinkedListMultimap<Path, DependencyPath> multimap = artifactsToDependencyPaths(artifacts);
+//    return ImmutableList.copyOf(multimap.keySet());
   }
 
   /**
